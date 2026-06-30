@@ -30,12 +30,34 @@
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="lessonid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="showconfidence" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Show the confidence slider to students on this lesson."/>
+        <FIELD NAME="timermode" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Timer shown to students: 0 none, 1 elapsed count-up, 2 countdown."/>
+        <FIELD NAME="timerminutes" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Countdown duration in minutes (timermode = 2)."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="lessonid" TYPE="foreign-unique" FIELDS="lessonid" REFTABLE="lesson" REFFIELDS="id"/>
       </KEYS>
+    </TABLE>
+    <TABLE NAME="local_lessontweak_ptime" COMMENT="Active time (seconds) a student spends on each lesson page and attempt.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="lessonid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="pageid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="attempt" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Lesson retry/attempt number this time belongs to."/>
+        <FIELD NAME="timespent" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Accumulated active time in seconds."/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+        <KEY NAME="lessonid" TYPE="foreign" FIELDS="lessonid" REFTABLE="lesson" REFFIELDS="id"/>
+        <KEY NAME="pageid" TYPE="foreign" FIELDS="pageid" REFTABLE="lesson_pages" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="userid-lessonid-pageid-attempt" UNIQUE="true" FIELDS="userid, lessonid, pageid, attempt"/>
+      </INDEXES>
     </TABLE>
   </TABLES>
 </XMLDB>

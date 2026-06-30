@@ -74,16 +74,43 @@ function local_lessontweak_show_confidence(int $lessonid): bool {
     return $value === false ? true : (bool) $value;
 }
 
+/** Timer disabled for the lesson. */
+define('LOCAL_LESSONTWEAK_TIMER_NONE', 0);
+/** Count-up elapsed timer. */
+define('LOCAL_LESSONTWEAK_TIMER_ELAPSED', 1);
+/** Countdown from a set number of minutes. */
+define('LOCAL_LESSONTWEAK_TIMER_COUNTDOWN', 2);
+
 /**
- * Add the "Show confidence slider" checkbox to the lesson settings form.
+ * The per-lesson timer configuration.
+ *
+ * Defaults to elapsed mode when no per-lesson row exists yet.
+ *
+ * @param int $lessonid
+ * @return array [int mode, int minutes]
+ */
+function local_lessontweak_timer_config(int $lessonid): array {
+    global $DB;
+    $row = $DB->get_record('local_lessontweak_lopt', ['lessonid' => $lessonid], 'timermode, timerminutes');
+    if (!$row) {
+        return [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0];
+    }
+    return [(int) $row->timermode, (int) $row->timerminutes];
+}
+
+/**
+ * Add per-lesson Lesson tweaks checkboxes to the lesson settings form.
  *
  * Uses the core coursemodule form callback, so no lesson core file is modified.
+ * Each checkbox only appears when its site-wide feature is enabled.
  *
  * @param moodleform_mod $formwrapper
  * @param MoodleQuickForm $mform
  */
 function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform): void {
-    if (!get_config('local_lessontweak', 'enableconfidence')) {
+    $confidence = get_config('local_lessontweak', 'enableconfidence');
+    $elapsed = get_config('local_lessontweak', 'enableelapsedtimer');
+    if (!$confidence && !$elapsed) {
         return;
     }
     $current = $formwrapper->get_current();
@@ -91,25 +118,52 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
         return;
     }
 
-    $mform->addElement('header', 'lessontweakheader',
-        get_string('confidenceslider', 'local_lessontweak'));
-
-    $mform->addElement('advcheckbox', 'lessontweakshowconfidence',
-        get_string('showconfidence', 'local_lessontweak'));
-    $mform->addHelpButton('lessontweakshowconfidence', 'showconfidence', 'local_lessontweak');
-    $mform->setType('lessontweakshowconfidence', PARAM_BOOL);
-
-    // Default to the stored value, or on for a new lesson.
     $instance = $formwrapper->get_instance();
     $lessonid = !empty($instance->id) ? (int) $instance->id : 0;
-    $mform->setDefault('lessontweakshowconfidence',
-        $lessonid ? (int) local_lessontweak_show_confidence($lessonid) : 1);
+
+    $mform->addElement('header', 'lessontweakheader',
+        get_string('pluginname', 'local_lessontweak'));
+
+    if ($confidence) {
+        $mform->addElement('advcheckbox', 'lessontweakshowconfidence',
+            get_string('showconfidence', 'local_lessontweak'));
+        $mform->addHelpButton('lessontweakshowconfidence', 'showconfidence', 'local_lessontweak');
+        $mform->setType('lessontweakshowconfidence', PARAM_BOOL);
+        $mform->setDefault('lessontweakshowconfidence',
+            $lessonid ? (int) local_lessontweak_show_confidence($lessonid) : 1);
+    }
+
+    if ($elapsed) {
+        $modes = [
+            LOCAL_LESSONTWEAK_TIMER_NONE      => get_string('timermode_none', 'local_lessontweak'),
+            LOCAL_LESSONTWEAK_TIMER_ELAPSED   => get_string('timermode_elapsed', 'local_lessontweak'),
+            LOCAL_LESSONTWEAK_TIMER_COUNTDOWN => get_string('timermode_countdown', 'local_lessontweak'),
+        ];
+        $mform->addElement('select', 'lessontweaktimermode',
+            get_string('timermode', 'local_lessontweak'), $modes);
+        $mform->addHelpButton('lessontweaktimermode', 'timermode', 'local_lessontweak');
+
+        $mform->addElement('text', 'lessontweaktimerminutes',
+            get_string('timerminutes', 'local_lessontweak'), ['size' => 5]);
+        $mform->setType('lessontweaktimerminutes', PARAM_INT);
+        $mform->hideIf('lessontweaktimerminutes', 'lessontweaktimermode', 'neq',
+            LOCAL_LESSONTWEAK_TIMER_COUNTDOWN);
+
+        [$defmode, $defmin] = $lessonid
+            ? local_lessontweak_timer_config($lessonid)
+            : [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0];
+        $mform->setDefault('lessontweaktimermode', $defmode);
+        $mform->setDefault('lessontweaktimerminutes', $defmin);
+    }
 }
 
 /**
- * Persist the "Show confidence slider" checkbox when a lesson is saved.
+ * Persist the per-lesson Lesson tweaks checkboxes when a lesson is saved.
  *
- * @param stdClass $data submitted module data (includes our element)
+ * Only columns whose checkbox was present (feature enabled) are written, so a
+ * disabled feature does not clobber a stored value.
+ *
+ * @param stdClass $data submitted module data (includes our elements)
  * @param stdClass $course
  * @return stdClass
  */
@@ -120,18 +174,30 @@ function local_lessontweak_coursemodule_edit_post_actions($data, $course) {
         return $data;
     }
 
-    $show = !empty($data->lessontweakshowconfidence) ? 1 : 0;
+    $fields = [];
+    if (property_exists($data, 'lessontweakshowconfidence')) {
+        $fields['showconfidence'] = !empty($data->lessontweakshowconfidence) ? 1 : 0;
+    }
+    if (property_exists($data, 'lessontweaktimermode')) {
+        $fields['timermode'] = (int) $data->lessontweaktimermode;
+        $fields['timerminutes'] = max(0, (int) ($data->lessontweaktimerminutes ?? 0));
+    }
+    if (!$fields) {
+        return $data;
+    }
+
     $existing = $DB->get_record('local_lessontweak_lopt', ['lessonid' => $data->instance]);
     if ($existing) {
-        $existing->showconfidence = $show;
+        foreach ($fields as $name => $value) {
+            $existing->$name = $value;
+        }
         $existing->timemodified = time();
         $DB->update_record('local_lessontweak_lopt', $existing);
     } else {
-        $DB->insert_record('local_lessontweak_lopt', (object) [
-            'lessonid'       => $data->instance,
-            'showconfidence' => $show,
-            'timemodified'   => time(),
-        ]);
+        $DB->insert_record('local_lessontweak_lopt', (object) ($fields + [
+            'lessonid'     => $data->instance,
+            'timemodified' => time(),
+        ]));
     }
 
     return $data;

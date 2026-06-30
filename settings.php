@@ -41,4 +41,18 @@ if ($hassiteconfig) {
         get_string('enableconfidence_desc', 'local_lessontweak'),
         0
     ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'local_lessontweak/enabletimetracking',
+        get_string('enabletimetracking', 'local_lessontweak'),
+        get_string('enabletimetracking_desc', 'local_lessontweak'),
+        0
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'local_lessontweak/enableelapsedtimer',
+        get_string('enableelapsedtimer', 'local_lessontweak'),
+        get_string('enableelapsedtimer_desc', 'local_lessontweak'),
+        0
+    ));
 }

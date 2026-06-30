@@ -41,6 +41,101 @@ class hook_callbacks {
 
         self::maybe_add_dragreorder($PAGE);
         self::maybe_add_confidence_slider($PAGE);
+        self::maybe_add_time_tracker($PAGE);
+        self::maybe_add_elapsed_timer($PAGE);
+    }
+
+    /**
+     * Show a count-up "time since you started this attempt" badge (view.php).
+     *
+     * Reads the attempt start from the lesson's own {lesson_timer} table and
+     * passes the already-elapsed seconds to the AMD module. Display only.
+     *
+     * @param \moodle_page $PAGE
+     */
+    protected static function maybe_add_elapsed_timer(\moodle_page $PAGE): void {
+        global $CFG, $DB, $USER;
+
+        if (!get_config('local_lessontweak', 'enableelapsedtimer')) {
+            return;
+        }
+        if ($PAGE->pagetype !== 'mod-lesson-view') {
+            return;
+        }
+        $context = $PAGE->context;
+        if (empty($context) || $context->contextlevel !== CONTEXT_MODULE) {
+            return;
+        }
+        if (!has_capability('mod/lesson:view', $context)) {
+            return;
+        }
+
+        $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+        if (!$cm) {
+            return;
+        }
+
+        require_once($CFG->dirroot . '/local/lessontweak/lib.php');
+        [$mode, $minutes] = local_lessontweak_timer_config((int) $cm->instance);
+        if ($mode === LOCAL_LESSONTWEAK_TIMER_NONE) {
+            return;
+        }
+
+        // Latest attempt start for this user (lesson records it for every attempt).
+        $starttime = $DB->get_field_sql(
+            "SELECT MAX(starttime) FROM {lesson_timer} WHERE lessonid = :lessonid AND userid = :userid",
+            ['lessonid' => $cm->instance, 'userid' => $USER->id]
+        );
+        if (empty($starttime)) {
+            // No timer row (e.g. a teacher previewing): nothing to count from.
+            return;
+        }
+
+        $elapsed = max(0, time() - (int) $starttime);
+
+        if ($mode === LOCAL_LESSONTWEAK_TIMER_COUNTDOWN) {
+            if ($minutes <= 0) {
+                return;
+            }
+            $seconds = max(0, ($minutes * 60) - $elapsed);
+            $jsmode = 'countdown';
+        } else {
+            $seconds = $elapsed;
+            $jsmode = 'elapsed';
+        }
+
+        $PAGE->requires->js_call_amd('local_lessontweak/elapsedtimer', 'init', [[
+            'mode'    => $jsmode,
+            'seconds' => $seconds,
+        ]]);
+    }
+
+    /**
+     * Add the active-time heartbeat on lesson question/content pages (view.php).
+     *
+     * Time is stored through the plugin's own web service into its own table —
+     * it does not affect the lesson grade.
+     *
+     * @param \moodle_page $PAGE
+     */
+    protected static function maybe_add_time_tracker(\moodle_page $PAGE): void {
+        if (!get_config('local_lessontweak', 'enabletimetracking')) {
+            return;
+        }
+        if ($PAGE->pagetype !== 'mod-lesson-view') {
+            return;
+        }
+        $context = $PAGE->context;
+        if (empty($context) || $context->contextlevel !== CONTEXT_MODULE) {
+            return;
+        }
+        if (!has_capability('mod/lesson:view', $context)) {
+            return;
+        }
+
+        $PAGE->requires->js_call_amd('local_lessontweak/tracker', 'init', [
+            (int) $context->instanceid,
+        ]);
     }
 
     /**

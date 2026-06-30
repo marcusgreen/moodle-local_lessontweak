@@ -49,3 +49,40 @@
     font-size: 0.85em;
     color: #6c757d;
 }
+
+/* local_lessontweak: count-up elapsed-time badge. */
+
+.lessontweak-elapsed {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin: 0 0 1rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #f8f9fa;
+    font-size: 0.95em;
+}
+
+.lessontweak-elapsed-clock {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.lessontweak-elapsed-warning {
+    border-color: #f0ad4e;
+    background: #fcf3e3;
+}
+
+.lessontweak-elapsed-warning .lessontweak-elapsed-clock {
+    color: #a8710f;
+}
+
+.lessontweak-elapsed-expired {
+    border-color: #d9534f;
+    background: #fbe9e9;
+}
+
+.lessontweak-elapsed-expired .lessontweak-elapsed-clock {
+    color: #b02a25;
+}

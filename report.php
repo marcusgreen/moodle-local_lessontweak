@@ -45,25 +45,63 @@ $PAGE->set_heading(format_string($course->fullname));
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('confidencereport', 'local_lessontweak'));
 
-// Pull every confidence row for this lesson, with student and page title.
+// Pull confidence and time rows for this lesson, with student and page title,
+// then merge them on user + page + attempt.
 $userfieldsapi = \core_user\fields::for_name();
 $usernamefields = $userfieldsapi->get_sql('u', false, '', '', true)->selects;
 
-$sql = "SELECT c.id, c.userid, c.pageid, c.attempt, c.confidence, c.timemodified,
-               lp.title AS pagetitle $usernamefields
-          FROM {local_lessontweak_conf} c
-          JOIN {user} u ON u.id = c.userid
-     LEFT JOIN {lesson_pages} lp ON lp.id = c.pageid
-         WHERE c.lessonid = :lessonid
-      ORDER BY u.lastname, u.firstname, c.attempt, c.pageid";
+$confsql = "SELECT c.id, c.userid, c.pageid, c.attempt, c.confidence, c.timemodified,
+                   lp.title AS pagetitle $usernamefields
+              FROM {local_lessontweak_conf} c
+              JOIN {user} u ON u.id = c.userid
+         LEFT JOIN {lesson_pages} lp ON lp.id = c.pageid
+             WHERE c.lessonid = :lessonid";
+$confrows = $DB->get_records_sql($confsql, ['lessonid' => $lesson->id]);
 
-$records = $DB->get_records_sql($sql, ['lessonid' => $lesson->id]);
+$timesql = "SELECT t.id, t.userid, t.pageid, t.attempt, t.timespent, t.timemodified,
+                   lp.title AS pagetitle $usernamefields
+              FROM {local_lessontweak_ptime} t
+              JOIN {user} u ON u.id = t.userid
+         LEFT JOIN {lesson_pages} lp ON lp.id = t.pageid
+             WHERE t.lessonid = :lessonid";
+$timerows = $DB->get_records_sql($timesql, ['lessonid' => $lesson->id]);
 
-if (!$records) {
+if (!$confrows && !$timerows) {
     echo $OUTPUT->notification(get_string('confidencenodata', 'local_lessontweak'), 'info');
     echo $OUTPUT->footer();
     die;
 }
+
+// Merge both sources keyed by user|page|attempt.
+$merged = [];
+$keyof = fn($r) => $r->userid . '|' . $r->pageid . '|' . $r->attempt;
+$basify = function($r) {
+    $base = clone $r;
+    $base->confidence = null;
+    $base->timespent = null;
+    $base->updated = $r->timemodified;
+    unset($base->id, $base->timemodified);
+    return $base;
+};
+
+foreach ($confrows as $r) {
+    $key = $keyof($r);
+    $merged[$key] = $merged[$key] ?? $basify($r);
+    $merged[$key]->confidence = $r->confidence;
+    $merged[$key]->updated = max($merged[$key]->updated, $r->timemodified);
+}
+foreach ($timerows as $r) {
+    $key = $keyof($r);
+    $merged[$key] = $merged[$key] ?? $basify($r);
+    $merged[$key]->timespent = $r->timespent;
+    $merged[$key]->updated = max($merged[$key]->updated, $r->timemodified);
+}
+
+// Sort by student name, then attempt, then page.
+usort($merged, function($a, $b) {
+    return [strtolower($a->lastname), strtolower($a->firstname), $a->attempt, $a->pageid]
+       <=> [strtolower($b->lastname), strtolower($b->firstname), $b->attempt, $b->pageid];
+});
 
 $table = new html_table();
 $table->head = [
@@ -71,12 +109,13 @@ $table->head = [
     get_string('confidencepage', 'local_lessontweak'),
     get_string('confidenceattempt', 'local_lessontweak'),
     get_string('confidencevalue', 'local_lessontweak'),
-    get_string('time'),
+    get_string('confidencetimespent', 'local_lessontweak'),
+    get_string('confidenceupdated', 'local_lessontweak'),
 ];
 $table->attributes['class'] = 'generaltable lessontweak-confidence-report';
 $table->data = [];
 
-foreach ($records as $r) {
+foreach ($merged as $r) {
     $userurl = new moodle_url('/user/view.php', ['id' => $r->userid, 'course' => $course->id]);
     $studentname = html_writer::link($userurl, fullname($r));
     $pagetitle = $r->pagetitle !== null
@@ -88,8 +127,9 @@ foreach ($records as $r) {
         $pagetitle,
         // Stored attempt is 0-indexed (lesson retry number); show 1-indexed.
         $r->attempt + 1,
-        $r->confidence . '%',
-        userdate($r->timemodified),
+        $r->confidence !== null ? $r->confidence . '%' : '—',
+        $r->timespent !== null ? format_time($r->timespent) : '—',
+        userdate($r->updated),
     ];
 }
 

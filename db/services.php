@@ -32,4 +32,11 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'mod/lesson:view',
     ],
+    'local_lessontweak_track_time' => [
+        'classname'   => 'local_lessontweak\external\track_time',
+        'description' => 'Accumulate the active time a student spends on a lesson page.',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'mod/lesson:view',
+    ],
 ];

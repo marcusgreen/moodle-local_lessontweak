@@ -54,6 +54,15 @@ class provider implements
             'timemodified' => 'privacy:metadata:local_lessontweak_conf:timemodified',
         ], 'privacy:metadata:local_lessontweak_conf');
 
+        $collection->add_database_table('local_lessontweak_ptime', [
+            'userid'       => 'privacy:metadata:local_lessontweak_ptime:userid',
+            'lessonid'     => 'privacy:metadata:local_lessontweak_ptime:lessonid',
+            'pageid'       => 'privacy:metadata:local_lessontweak_ptime:pageid',
+            'attempt'      => 'privacy:metadata:local_lessontweak_ptime:attempt',
+            'timespent'    => 'privacy:metadata:local_lessontweak_ptime:timespent',
+            'timemodified' => 'privacy:metadata:local_lessontweak_ptime:timemodified',
+        ], 'privacy:metadata:local_lessontweak_ptime');
+
         return $collection;
     }
 
@@ -66,18 +75,20 @@ class provider implements
     public static function get_contexts_for_userid(int $userid): contextlist {
         $contextlist = new contextlist();
 
-        $sql = "SELECT ctx.id
-                  FROM {local_lessontweak_conf} c
-                  JOIN {lesson} l ON l.id = c.lessonid
-                  JOIN {course_modules} cm ON cm.instance = l.id
-                  JOIN {modules} m ON m.id = cm.module AND m.name = :modname
-                  JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :modlevel
-                 WHERE c.userid = :userid";
-        $contextlist->add_from_sql($sql, [
-            'modname'  => 'lesson',
-            'modlevel' => CONTEXT_MODULE,
-            'userid'   => $userid,
-        ]);
+        foreach (['local_lessontweak_conf', 'local_lessontweak_ptime'] as $tablename) {
+            $sql = "SELECT ctx.id
+                      FROM {{$tablename}} d
+                      JOIN {lesson} l ON l.id = d.lessonid
+                      JOIN {course_modules} cm ON cm.instance = l.id
+                      JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+                      JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :modlevel
+                     WHERE d.userid = :userid";
+            $contextlist->add_from_sql($sql, [
+                'modname'  => 'lesson',
+                'modlevel' => CONTEXT_MODULE,
+                'userid'   => $userid,
+            ]);
+        }
 
         return $contextlist;
     }
@@ -93,16 +104,18 @@ class provider implements
             return;
         }
 
-        $sql = "SELECT c.userid
-                  FROM {local_lessontweak_conf} c
-                  JOIN {lesson} l ON l.id = c.lessonid
-                  JOIN {course_modules} cm ON cm.instance = l.id
-                  JOIN {modules} m ON m.id = cm.module AND m.name = :modname
-                 WHERE cm.id = :cmid";
-        $userlist->add_from_sql('userid', $sql, [
-            'modname' => 'lesson',
-            'cmid'    => $context->instanceid,
-        ]);
+        foreach (['local_lessontweak_conf', 'local_lessontweak_ptime'] as $tablename) {
+            $sql = "SELECT d.userid
+                      FROM {{$tablename}} d
+                      JOIN {lesson} l ON l.id = d.lessonid
+                      JOIN {course_modules} cm ON cm.instance = l.id
+                      JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+                     WHERE cm.id = :cmid";
+            $userlist->add_from_sql('userid', $sql, [
+                'modname' => 'lesson',
+                'cmid'    => $context->instanceid,
+            ]);
+        }
     }
 
     /**
@@ -124,17 +137,15 @@ class provider implements
                 continue;
             }
 
-            $records = $DB->get_records('local_lessontweak_conf', [
+            $export = [];
+
+            $confrecords = $DB->get_records('local_lessontweak_conf', [
                 'userid'   => $user->id,
                 'lessonid' => $cm->instance,
             ]);
-            if (!$records) {
-                continue;
-            }
-
-            $data = [];
-            foreach ($records as $record) {
-                $data[] = [
+            $confidence = [];
+            foreach ($confrecords as $record) {
+                $confidence[] = [
                     'pageid'       => $record->pageid,
                     'attempt'      => $record->attempt,
                     'confidence'   => $record->confidence,
@@ -142,11 +153,33 @@ class provider implements
                     'timemodified' => \core_privacy\local\request\transform::datetime($record->timemodified),
                 ];
             }
+            if ($confidence) {
+                $export['confidence'] = $confidence;
+            }
 
-            writer::with_context($context)->export_data(
-                [get_string('pluginname', 'local_lessontweak')],
-                (object) ['confidence' => $data]
-            );
+            $timerecords = $DB->get_records('local_lessontweak_ptime', [
+                'userid'   => $user->id,
+                'lessonid' => $cm->instance,
+            ]);
+            $timespent = [];
+            foreach ($timerecords as $record) {
+                $timespent[] = [
+                    'pageid'       => $record->pageid,
+                    'attempt'      => $record->attempt,
+                    'timespent'    => $record->timespent,
+                    'timemodified' => \core_privacy\local\request\transform::datetime($record->timemodified),
+                ];
+            }
+            if ($timespent) {
+                $export['timespent'] = $timespent;
+            }
+
+            if ($export) {
+                writer::with_context($context)->export_data(
+                    [get_string('pluginname', 'local_lessontweak')],
+                    (object) $export
+                );
+            }
         }
     }
 
@@ -166,6 +199,7 @@ class provider implements
             return;
         }
         $DB->delete_records('local_lessontweak_conf', ['lessonid' => $cm->instance]);
+        $DB->delete_records('local_lessontweak_ptime', ['lessonid' => $cm->instance]);
     }
 
     /**
@@ -187,6 +221,10 @@ class provider implements
                 continue;
             }
             $DB->delete_records('local_lessontweak_conf', [
+                'userid'   => $userid,
+                'lessonid' => $cm->instance,
+            ]);
+            $DB->delete_records('local_lessontweak_ptime', [
                 'userid'   => $userid,
                 'lessonid' => $cm->instance,
             ]);
@@ -213,6 +251,8 @@ class provider implements
         [$insql, $inparams] = $DB->get_in_or_equal($userlist->get_userids(), SQL_PARAMS_NAMED);
         $params = array_merge($inparams, ['lessonid' => $cm->instance]);
         $DB->delete_records_select('local_lessontweak_conf',
+            "lessonid = :lessonid AND userid $insql", $params);
+        $DB->delete_records_select('local_lessontweak_ptime',
             "lessonid = :lessonid AND userid $insql", $params);
     }
 }

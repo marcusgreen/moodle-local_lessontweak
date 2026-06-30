@@ -1,70 +1,124 @@
 # local_lessontweak
 
-Companion plugin that improves **mod_lesson** with **zero core modifications**.
-First feature: **drag-to-reorder pages** in the collapsed lesson editor.
+Companion plugin that enhances **mod_lesson** with **zero core modifications**.
+Everything rides core extension points — output hooks, plugin web services, the
+`coursemodule_*` form callbacks and the navigation callback — so no file under
+`mod/lesson` is ever edited.
 
-![Drag-to-reorder lesson pages](docs/lesson_drag_drop.gif)
+## Features
+
+| Feature | Where | Persists? |
+|---|---|---|
+| **Drag-to-reorder pages** | lesson editor (`edit.php`) | yes — drives lesson's own move action |
+| **Confidence slider** | question pages (`view.php`) | yes — own web service + own table |
+| **Page time tracking** | every lesson page (`view.php`) | yes — heartbeat web service + own table |
+| **Timer badge** (elapsed or countdown) | every lesson page (`view.php`) | display only |
+| **Confidence/time report** | activity menu → *Confidence report* | reads the two tables above |
+
+Each feature has a site-wide on/off in *Site administration → Plugins → Local
+plugins → Lesson tweaks*. The confidence slider and the timer also have
+per-lesson controls in the lesson's own settings form.
 
 ## How it works (no core changes)
 
-1. `db/hooks.php` listens to the core output hook
-   `\core\hook\output\before_footer_html_generation`.
-2. `classes/hook_callbacks.php` bails unless the current page is
-   `mod/lesson/edit.php`, the activity is a lesson, the feature is enabled, and
-   the user has `mod/lesson:edit`. Then it loads the AMD module, passing the
-   course-module id and sesskey.
-3. `amd/src/dragreorder.js` finds the editor table (its title cells contain
-   `<a id="lesson-<pageid>">`), makes the rows draggable, and reorders them in the
-   DOM as you drag.
-4. On drop it reads the new order and navigates to the lesson module's **existing**
-   move action:
-   `mod/lesson/lesson.php?id=<cmid>&sesskey=<key>&action=moveit&pageid=<pid>&after=<afterpid>`
-   (`after=0` means move to the top). The server reorders and reloads the editor.
+### 1. Drag-to-reorder pages
+`db/hooks.php` listens to `\core\hook\output\before_footer_html_generation`.
+`classes/hook_callbacks.php` detects the editor via `pagetype === 'mod-lesson-edit'`
+plus the module context (`$PAGE->cm` is empty at footer time) and loads
+`amd/src/dragreorder.js`. On drop the JS navigates to lesson's **existing** move
+action (`lesson.php?...&action=moveit&pageid=<pid>&after=<afterpid>`), so all
+permission, event and sesskey handling stays in core lesson.
 
-No lesson core file is touched. The only server endpoint used is the one lesson
-already exposes for its "Move" links.
+### 2. Confidence slider
+On question pages `amd/src/confidence.js` adds a 0–100% slider. When the student
+submits their answer the value is saved through the plugin's own web service
+`local_lessontweak_save_confidence` into `local_lessontweak_conf`
+(keyed user + lesson + page + attempt, upserted). It does **not** touch the
+lesson grade. Per-lesson visibility is set in the lesson settings form.
+
+### 3. Page time tracking
+`amd/src/tracker.js` runs a heartbeat that only counts time while the tab is
+visible. Each pulse sends the measured delta to
+`local_lessontweak_track_time`, which accumulates `timespent` in
+`local_lessontweak_ptime` (same key, delta clamped 0–120 s/ping). A final flush
+fires on `visibilitychange → hidden` and `pagehide`.
+
+### 4. Timer badge (elapsed or countdown)
+Per lesson, the teacher chooses **No timer**, **Elapsed (count up)** or
+**Countdown**. `classes/hook_callbacks.php` reads the attempt start from lesson's
+own `{lesson_timer}.starttime` (written for every attempt), computes elapsed or
+remaining seconds, and passes them to `amd/src/elapsedtimer.js`, which ticks on
+the browser clock (no server/client skew). Countdown turns amber in the last
+minute and red at zero. Display only — the lesson grade and time limit are
+untouched.
+
+### 5. Teacher report
+`local_lessontweak_extend_settings_navigation()` adds a **Confidence report** link
+to the lesson's settings menu (capability `mod/lesson:viewreports`). `report.php`
+merges the confidence and time tables into one table: student, page, attempt,
+confidence %, time spent.
 
 ## Files
 
 ```
 local/lessontweak/
 ├── version.php
-├── settings.php                       # admin toggle: enable drag-reorder
-├── styles.css                         # grip + dragging styles
+├── settings.php                      # site-wide toggles for each feature
+├── styles.css
+├── lib.php                           # nav + coursemodule_* form callbacks, timer helpers
+├── report.php                        # teacher confidence/time report
 ├── lang/en/local_lessontweak.php
-├── db/hooks.php                       # before_footer listener
-├── classes/hook_callbacks.php         # context guard + js_call_amd
-├── classes/privacy/provider.php       # null_provider (stores no personal data)
+├── db/
+│   ├── hooks.php                     # before_footer listener
+│   ├── services.php                  # save_confidence + track_time web services
+│   ├── install.xml                   # _conf, _lopt, _ptime tables
+│   └── upgrade.php
+├── classes/
+│   ├── hook_callbacks.php            # loads the right AMD module per page
+│   ├── external/
+│   │   ├── save_confidence.php
+│   │   └── track_time.php
+│   └── privacy/provider.php          # exports/deletes _conf and _ptime
 └── amd/
-    ├── src/dragreorder.js             # readable ES6 source
-    └── build/dragreorder.min.js       # AMD module Moodle actually serves
+    ├── src/{dragreorder,confidence,tracker,elapsedtimer}.js
+    └── build/*.min.js                # what Moodle serves
 ```
+
+## Database
+
+- `local_lessontweak_conf` — confidence per user/lesson/page/attempt.
+- `local_lessontweak_ptime` — active seconds per user/lesson/page/attempt.
+- `local_lessontweak_lopt` — per-lesson options (`showconfidence`, `timermode`,
+  `timerminutes`).
 
 ## Install
 
 1. Copy this folder to `local/lessontweak` in your Moodle root.
 2. *Site administration → Notifications* to install.
-3. *Site administration → Plugins → Local plugins → Lesson tweaks* — the
-   drag-reorder toggle is on by default.
+3. *Site administration → Plugins → Local plugins → Lesson tweaks* — enable the
+   features you want. Drag-reorder is on by default; the others are off.
 
 ## Usage
 
-Open any lesson → **Edit → Collapsed**. Each page row gets a drag grip; drag a
-row to a new position and release. The page reloads with the new order saved.
+- **Reorder:** lesson → *Edit → Collapsed*, drag a page row, release.
+- **Confidence / timer per lesson:** lesson → *Edit settings → Lesson tweaks*.
+- **Report:** lesson → activity menu (*More*) → *Confidence report*.
 
 ## Notes / limits
 
-- Enhances the **collapsed** editor (the standard page table). The expanded editor
-  uses different markup and is out of scope for this first version.
-- Reorder persists through lesson's own move action, so permissions, events and
-  sesskey checks are all handled by core lesson.
-- Rebuild JS after editing the source with `grunt amd --root=local/lessontweak`
-  (a pre-built `amd/build` file is shipped so it works without grunt).
+- Drag-reorder enhances the **collapsed** editor only; the expanded editor uses
+  different markup and is out of scope.
+- The timer's start comes from `{lesson_timer}.starttime`. If the lesson has its
+  own time limit, core already shows a countdown — this badge sits alongside it.
+- Time tracking's final partial span (≤ ping interval) is best-effort on unload;
+  bulk active time is captured.
+- Rebuild JS after editing source: `grunt amd` from this directory (pre-built
+  `amd/build` files are shipped so it works without grunt).
 
 ## Why this exists
 
-Demonstrates the "no core modification" path for improving lesson: a core output
-hook to inject behaviour + JavaScript that drives lesson's existing endpoints. See
-`mod/lesson/poc/no_core_improvements.md` for the wider catalogue of callback/JS
-improvements, and `mod/lesson/poc/options.md` for the changes that *do* need core
-(new scored question types, question-bank sharing).
+Demonstrates the "no core modification" path for improving lesson: output hooks,
+plugin web services, form and navigation callbacks driving lesson's existing
+data and endpoints. See `mod/lesson/poc/no_core_improvements.md` for the wider
+catalogue, and `mod/lesson/poc/options.md` for changes that *do* need core (new
+scored question types, question-bank sharing).
