@@ -99,6 +99,45 @@ function local_lessontweak_timer_config(int $lessonid): array {
 }
 
 /**
+ * The clock sizes offered for the timer badge, keyed by rem value.
+ *
+ * @return array [string rem => string label]
+ */
+function local_lessontweak_timer_sizes(): array {
+    return [
+        '1'   => get_string('timersize_small', 'local_lessontweak'),
+        '1.5' => get_string('timersize_medium', 'local_lessontweak'),
+        '2'   => get_string('timersize_large', 'local_lessontweak'),
+        '2.5' => get_string('timersize_xlarge', 'local_lessontweak'),
+    ];
+}
+
+/**
+ * The default clock size (rem) from site configuration.
+ *
+ * @return string
+ */
+function local_lessontweak_default_timer_size(): string {
+    $value = get_config('local_lessontweak', 'timersize');
+    return $value !== false && $value !== '' ? $value : '1.5';
+}
+
+/**
+ * The clock size (rem) to use for a lesson: its own override, else the site default.
+ *
+ * @param int $lessonid
+ * @return string
+ */
+function local_lessontweak_timer_size(int $lessonid): string {
+    global $DB;
+    $value = $DB->get_field('local_lessontweak_lopt', 'timersize', ['lessonid' => $lessonid]);
+    if ($value === false || $value === null || $value === '') {
+        return local_lessontweak_default_timer_size();
+    }
+    return $value;
+}
+
+/**
  * Add per-lesson Lesson tweaks checkboxes to the lesson settings form.
  *
  * Uses the core coursemodule form callback, so no lesson core file is modified.
@@ -108,6 +147,8 @@ function local_lessontweak_timer_config(int $lessonid): array {
  * @param MoodleQuickForm $mform
  */
 function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform): void {
+    global $DB;
+
     $confidence = get_config('local_lessontweak', 'enableconfidence');
     $elapsed = get_config('local_lessontweak', 'enableelapsedtimer');
     if (!$confidence && !$elapsed) {
@@ -118,8 +159,8 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
         return;
     }
 
-    $instance = $formwrapper->get_instance();
-    $lessonid = !empty($instance->id) ? (int) $instance->id : 0;
+    // get_instance() returns the lesson instance id (0 for a new lesson).
+    $lessonid = (int) $formwrapper->get_instance();
 
     $mform->addElement('header', 'lessontweakheader',
         get_string('pluginname', 'local_lessontweak'));
@@ -149,11 +190,24 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
         $mform->hideIf('lessontweaktimerminutes', 'lessontweaktimermode', 'neq',
             LOCAL_LESSONTWEAK_TIMER_COUNTDOWN);
 
+        // Clock size: an empty first option falls back to the site default.
+        $sizeoptions = ['' => get_string('timersize_default', 'local_lessontweak')]
+            + local_lessontweak_timer_sizes();
+        $mform->addElement('select', 'lessontweaktimersize',
+            get_string('timersize', 'local_lessontweak'), $sizeoptions);
+        $mform->addHelpButton('lessontweaktimersize', 'timersize', 'local_lessontweak');
+        $mform->hideIf('lessontweaktimersize', 'lessontweaktimermode', 'eq',
+            LOCAL_LESSONTWEAK_TIMER_NONE);
+
         [$defmode, $defmin] = $lessonid
             ? local_lessontweak_timer_config($lessonid)
             : [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0];
+        $defsize = $lessonid
+            ? (string) ($DB->get_field('local_lessontweak_lopt', 'timersize', ['lessonid' => $lessonid]) ?: '')
+            : '';
         $mform->setDefault('lessontweaktimermode', $defmode);
         $mform->setDefault('lessontweaktimerminutes', $defmin);
+        $mform->setDefault('lessontweaktimersize', $defsize);
     }
 }
 
@@ -181,6 +235,12 @@ function local_lessontweak_coursemodule_edit_post_actions($data, $course) {
     if (property_exists($data, 'lessontweaktimermode')) {
         $fields['timermode'] = (int) $data->lessontweaktimermode;
         $fields['timerminutes'] = max(0, (int) ($data->lessontweaktimerminutes ?? 0));
+    }
+    if (property_exists($data, 'lessontweaktimersize')) {
+        // Empty means "use the site default".
+        $sizes = local_lessontweak_timer_sizes();
+        $size = (string) $data->lessontweaktimersize;
+        $fields['timersize'] = isset($sizes[$size]) ? $size : null;
     }
     if (!$fields) {
         return $data;

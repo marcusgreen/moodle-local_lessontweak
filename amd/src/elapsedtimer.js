@@ -63,12 +63,14 @@ const place = (badge) => {
  * @param {object} params
  * @param {string} params.mode 'elapsed' or 'countdown'
  * @param {number} params.seconds elapsed seconds, or remaining seconds for countdown
+ * @param {string} [params.size] clock font size in rem
  */
 export const init = (params) => {
     const countdown = params.mode === 'countdown';
     const base = Math.max(0, parseInt(params.seconds, 10) || 0);
     const loadedAt = Date.now();
     const labelKey = countdown ? 'countdownlabel' : 'elapsedlabel';
+    const size = parseFloat(params.size);
 
     getString(labelKey, 'local_lessontweak').then((label) => {
         const badge = document.createElement('div');
@@ -81,6 +83,9 @@ export const init = (params) => {
         const clock = document.createElement('time');
         clock.className = 'lessontweak-elapsed-clock';
         clock.setAttribute('aria-live', 'off');
+        if (size > 0) {
+            clock.style.fontSize = size + 'rem';
+        }
 
         badge.appendChild(text);
         badge.appendChild(clock);

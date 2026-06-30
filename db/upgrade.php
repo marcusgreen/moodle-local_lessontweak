@@ -165,5 +165,18 @@ function xmldb_local_lessontweak_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026063006, 'local', 'lessontweak');
     }
 
+    if ($oldversion < 2026063007) {
+
+        // Add per-lesson timer clock size (rem); null uses the site default.
+        $table = new xmldb_table('local_lessontweak_lopt');
+        $field = new xmldb_field('timersize', XMLDB_TYPE_CHAR, '10', null, null, null, null, 'timerminutes');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Lessontweak savepoint reached.
+        upgrade_plugin_savepoint(true, 2026063007, 'local', 'lessontweak');
+    }
+
     return true;
 }

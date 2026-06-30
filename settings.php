@@ -55,4 +55,13 @@ if ($hassiteconfig) {
         get_string('enableelapsedtimer_desc', 'local_lessontweak'),
         0
     ));
+
+    require_once($CFG->dirroot . '/local/lessontweak/lib.php');
+    $settings->add(new admin_setting_configselect(
+        'local_lessontweak/timersize',
+        get_string('timersizedefault', 'local_lessontweak'),
+        get_string('timersizedefault_desc', 'local_lessontweak'),
+        '1.5',
+        local_lessontweak_timer_sizes()
+    ));
 }

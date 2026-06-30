@@ -107,6 +107,7 @@ class hook_callbacks {
         $PAGE->requires->js_call_amd('local_lessontweak/elapsedtimer', 'init', [[
             'mode'    => $jsmode,
             'seconds' => $seconds,
+            'size'    => local_lessontweak_timer_size((int) $cm->instance),
         ]]);
     }
 
