@@ -39,11 +39,23 @@ class hook_callbacks {
     ): void {
         global $PAGE;
 
+        self::maybe_add_dragreorder($PAGE);
+        self::maybe_add_confidence_slider($PAGE);
+    }
+
+    /**
+     * Add drag-to-reorder on the lesson editing page (edit.php).
+     *
+     * $PAGE->cm is not reliably populated at footer time, so detect via the
+     * page type and the module context instead. No core modification — the JS
+     * drives the lesson module's existing move action.
+     *
+     * @param \moodle_page $PAGE
+     */
+    protected static function maybe_add_dragreorder(\moodle_page $PAGE): void {
         if (!get_config('local_lessontweak', 'enabledragreorder')) {
             return;
         }
-        // The lesson editor page. $PAGE->cm is not reliably populated at footer
-        // time, so detect via the page type and the module context instead.
         if ($PAGE->pagetype !== 'mod-lesson-edit') {
             return;
         }
@@ -51,15 +63,51 @@ class hook_callbacks {
         if (empty($context) || $context->contextlevel !== CONTEXT_MODULE) {
             return;
         }
-        $cmid = $context->instanceid;
         if (!has_capability('mod/lesson:edit', $context)) {
             return;
         }
 
         // js_call_amd spreads this list positionally into init(cmid, sesskey).
         $PAGE->requires->js_call_amd('local_lessontweak/dragreorder', 'init', [
-            (int) $cmid,
+            (int) $context->instanceid,
             sesskey(),
+        ]);
+    }
+
+    /**
+     * Add the confidence slider on lesson question pages (view.php).
+     *
+     * The slider value is stored through the plugin's own web service into its
+     * own table — it does not affect the lesson grade.
+     *
+     * @param \moodle_page $PAGE
+     */
+    protected static function maybe_add_confidence_slider(\moodle_page $PAGE): void {
+        global $CFG;
+
+        if (!get_config('local_lessontweak', 'enableconfidence')) {
+            return;
+        }
+        if ($PAGE->pagetype !== 'mod-lesson-view') {
+            return;
+        }
+        $context = $PAGE->context;
+        if (empty($context) || $context->contextlevel !== CONTEXT_MODULE) {
+            return;
+        }
+        if (!has_capability('mod/lesson:view', $context)) {
+            return;
+        }
+
+        // Respect the per-lesson "Show confidence slider" setting.
+        require_once($CFG->dirroot . '/local/lessontweak/lib.php');
+        $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+        if (!$cm || !local_lessontweak_show_confidence((int) $cm->instance)) {
+            return;
+        }
+
+        $PAGE->requires->js_call_amd('local_lessontweak/confidence', 'init', [
+            (int) $context->instanceid,
         ]);
     }
 }

@@ -3,6 +3,8 @@
 Companion plugin that improves **mod_lesson** with **zero core modifications**.
 First feature: **drag-to-reorder pages** in the collapsed lesson editor.
 
+![Drag-to-reorder lesson pages](docs/lesson_drag_drop.gif)
+
 ## How it works (no core changes)
 
 1. `db/hooks.php` listens to the core output hook

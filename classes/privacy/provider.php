@@ -16,21 +16,203 @@
 
 namespace local_lessontweak\privacy;
 
+use core_privacy\local\metadata\collection;
+use core_privacy\local\request\approved_contextlist;
+use core_privacy\local\request\approved_userlist;
+use core_privacy\local\request\contextlist;
+use core_privacy\local\request\userlist;
+use core_privacy\local\request\writer;
+
 /**
- * Privacy provider. This plugin stores no personal data.
+ * Privacy provider for local_lessontweak.
+ *
+ * Stores self-reported confidence values keyed by lesson module context.
  *
  * @package    local_lessontweak
  * @copyright  2026 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class provider implements \core_privacy\local\metadata\null_provider {
+class provider implements
+    \core_privacy\local\metadata\provider,
+    \core_privacy\local\request\plugin\provider,
+    \core_privacy\local\request\core_userlist_provider {
 
     /**
-     * Reason this plugin stores no personal data.
+     * Describe the data this plugin stores.
      *
-     * @return string
+     * @param collection $collection
+     * @return collection
      */
-    public static function get_reason(): string {
-        return 'privacy:metadata';
+    public static function get_metadata(collection $collection): collection {
+        $collection->add_database_table('local_lessontweak_conf', [
+            'userid'       => 'privacy:metadata:local_lessontweak_conf:userid',
+            'lessonid'     => 'privacy:metadata:local_lessontweak_conf:lessonid',
+            'pageid'       => 'privacy:metadata:local_lessontweak_conf:pageid',
+            'attempt'      => 'privacy:metadata:local_lessontweak_conf:attempt',
+            'confidence'   => 'privacy:metadata:local_lessontweak_conf:confidence',
+            'timecreated'  => 'privacy:metadata:local_lessontweak_conf:timecreated',
+            'timemodified' => 'privacy:metadata:local_lessontweak_conf:timemodified',
+        ], 'privacy:metadata:local_lessontweak_conf');
+
+        return $collection;
+    }
+
+    /**
+     * Get the list of contexts that contain data for the given user.
+     *
+     * @param int $userid
+     * @return contextlist
+     */
+    public static function get_contexts_for_userid(int $userid): contextlist {
+        $contextlist = new contextlist();
+
+        $sql = "SELECT ctx.id
+                  FROM {local_lessontweak_conf} c
+                  JOIN {lesson} l ON l.id = c.lessonid
+                  JOIN {course_modules} cm ON cm.instance = l.id
+                  JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+                  JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :modlevel
+                 WHERE c.userid = :userid";
+        $contextlist->add_from_sql($sql, [
+            'modname'  => 'lesson',
+            'modlevel' => CONTEXT_MODULE,
+            'userid'   => $userid,
+        ]);
+
+        return $contextlist;
+    }
+
+    /**
+     * Get the list of users who have data in the given context.
+     *
+     * @param userlist $userlist
+     */
+    public static function get_users_in_context(userlist $userlist): void {
+        $context = $userlist->get_context();
+        if (!$context instanceof \context_module) {
+            return;
+        }
+
+        $sql = "SELECT c.userid
+                  FROM {local_lessontweak_conf} c
+                  JOIN {lesson} l ON l.id = c.lessonid
+                  JOIN {course_modules} cm ON cm.instance = l.id
+                  JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+                 WHERE cm.id = :cmid";
+        $userlist->add_from_sql('userid', $sql, [
+            'modname' => 'lesson',
+            'cmid'    => $context->instanceid,
+        ]);
+    }
+
+    /**
+     * Export all confidence data for the approved contexts.
+     *
+     * @param approved_contextlist $contextlist
+     */
+    public static function export_user_data(approved_contextlist $contextlist): void {
+        global $DB;
+
+        $user = $contextlist->get_user();
+
+        foreach ($contextlist->get_contexts() as $context) {
+            if (!$context instanceof \context_module) {
+                continue;
+            }
+            $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+            if (!$cm) {
+                continue;
+            }
+
+            $records = $DB->get_records('local_lessontweak_conf', [
+                'userid'   => $user->id,
+                'lessonid' => $cm->instance,
+            ]);
+            if (!$records) {
+                continue;
+            }
+
+            $data = [];
+            foreach ($records as $record) {
+                $data[] = [
+                    'pageid'       => $record->pageid,
+                    'attempt'      => $record->attempt,
+                    'confidence'   => $record->confidence,
+                    'timecreated'  => \core_privacy\local\request\transform::datetime($record->timecreated),
+                    'timemodified' => \core_privacy\local\request\transform::datetime($record->timemodified),
+                ];
+            }
+
+            writer::with_context($context)->export_data(
+                [get_string('pluginname', 'local_lessontweak')],
+                (object) ['confidence' => $data]
+            );
+        }
+    }
+
+    /**
+     * Delete all confidence data in the given context (for all users).
+     *
+     * @param \context $context
+     */
+    public static function delete_data_for_all_users_in_context(\context $context): void {
+        global $DB;
+
+        if (!$context instanceof \context_module) {
+            return;
+        }
+        $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+        if (!$cm) {
+            return;
+        }
+        $DB->delete_records('local_lessontweak_conf', ['lessonid' => $cm->instance]);
+    }
+
+    /**
+     * Delete all confidence data for one user across the approved contexts.
+     *
+     * @param approved_contextlist $contextlist
+     */
+    public static function delete_data_for_user(approved_contextlist $contextlist): void {
+        global $DB;
+
+        $userid = $contextlist->get_user()->id;
+
+        foreach ($contextlist->get_contexts() as $context) {
+            if (!$context instanceof \context_module) {
+                continue;
+            }
+            $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+            if (!$cm) {
+                continue;
+            }
+            $DB->delete_records('local_lessontweak_conf', [
+                'userid'   => $userid,
+                'lessonid' => $cm->instance,
+            ]);
+        }
+    }
+
+    /**
+     * Delete data for multiple users in a single context.
+     *
+     * @param approved_userlist $userlist
+     */
+    public static function delete_data_for_users(approved_userlist $userlist): void {
+        global $DB;
+
+        $context = $userlist->get_context();
+        if (!$context instanceof \context_module) {
+            return;
+        }
+        $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+        if (!$cm) {
+            return;
+        }
+
+        [$insql, $inparams] = $DB->get_in_or_equal($userlist->get_userids(), SQL_PARAMS_NAMED);
+        $params = array_merge($inparams, ['lessonid' => $cm->instance]);
+        $DB->delete_records_select('local_lessontweak_conf',
+            "lessonid = :lessonid AND userid $insql", $params);
     }
 }

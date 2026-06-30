@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Settings for local_lessontweak.
+ * External function declarations for local_lessontweak.
  *
  * @package    local_lessontweak
  * @copyright  2026 Marcus Green
@@ -24,21 +24,12 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-if ($hassiteconfig) {
-    $settings = new admin_settingpage('local_lessontweak', get_string('pluginname', 'local_lessontweak'));
-    $ADMIN->add('localplugins', $settings);
-
-    $settings->add(new admin_setting_configcheckbox(
-        'local_lessontweak/enabledragreorder',
-        get_string('enabledragreorder', 'local_lessontweak'),
-        get_string('enabledragreorder_desc', 'local_lessontweak'),
-        1
-    ));
-
-    $settings->add(new admin_setting_configcheckbox(
-        'local_lessontweak/enableconfidence',
-        get_string('enableconfidence', 'local_lessontweak'),
-        get_string('enableconfidence_desc', 'local_lessontweak'),
-        0
-    ));
-}
+$functions = [
+    'local_lessontweak_save_confidence' => [
+        'classname'   => 'local_lessontweak\external\save_confidence',
+        'description' => 'Store a student\'s self-reported confidence (0-100) for a lesson question page.',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'mod/lesson:view',
+    ],
+];
