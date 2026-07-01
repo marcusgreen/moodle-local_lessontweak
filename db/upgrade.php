@@ -191,5 +191,18 @@ function xmldb_local_lessontweak_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026063008, 'local', 'lessontweak');
     }
 
+    if ($oldversion < 2026070103) {
+
+        // Add the per-lesson appearance tweak name (site-defined CSS chosen for the lesson).
+        $table = new xmldb_table('local_lessontweak_lopt');
+        $field = new xmldb_field('tweak', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'timerbar');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Lessontweak savepoint reached.
+        upgrade_plugin_savepoint(true, 2026070103, 'local', 'lessontweak');
+    }
+
     return true;
 }

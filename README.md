@@ -15,6 +15,7 @@ Everything rides core extension points — output hooks, plugin web services, th
 | **Timer badge** (elapsed or countdown, optional depleting bar, sized) | every lesson page (`view.php`) | display only |
 | **Confidence report** | activity menu → *Confidence report* | reads `_conf` (+ `_ptime`) |
 | **Time report** | activity menu → *Time report* | reads `_ptime` |
+| **Appearance tweaks** (per-lesson CSS) | every lesson page (`view.php`) | selection stored in `_lopt` |
 
 Each feature has a site-wide on/off in *Site administration → Plugins → Local
 plugins → Lesson tweaks*. The confidence slider and the timer also have
@@ -67,6 +68,17 @@ only when its site-wide feature is enabled:
 - **Time report** (`timereport.php`, shown when page time tracking is on) —
   per-page active time plus attempt duration and a per-attempt total.
 
+### 6. Appearance tweaks (per-lesson CSS)
+An administrator defines named CSS "tweaks" as a JSON array in the plugin
+settings (`tweaks`, validated by `classes/admin/setting_tweaks.php`); two
+examples ship by default. Each lesson's settings gains an **Appearance tweak**
+dropdown listing those names. `classes/hook_callbacks.php` looks up the lesson's
+chosen tweak on `mod-lesson-view` pages and hands its CSS to
+`amd/src/tweak.js`, which injects a `<style>` element into the page head. CSS
+only, student view only; only site admins can author tweaks. Selection is stored
+in `local_lessontweak_lopt.tweak` (the tweak name); if a tweak is later removed
+from settings the lesson silently falls back to no tweak.
+
 ## Files
 
 ```
@@ -86,12 +98,13 @@ local/lessontweak/
 │   └── upgrade.php
 ├── classes/
 │   ├── hook_callbacks.php            # loads the right AMD module per page
+│   ├── admin/setting_tweaks.php      # validates the appearance-tweaks JSON
 │   ├── external/
 │   │   ├── save_confidence.php
 │   │   └── track_time.php
 │   └── privacy/provider.php          # exports/deletes _conf and _ptime
 └── amd/
-    ├── src/{dragreorder,confidence,tracker,elapsedtimer}.js
+    ├── src/{dragreorder,confidence,tracker,elapsedtimer,tweak}.js
     └── build/*.min.js                # what Moodle serves
 ```
 
@@ -100,7 +113,7 @@ local/lessontweak/
 - `local_lessontweak_conf` — confidence per user/lesson/page/attempt.
 - `local_lessontweak_ptime` — active seconds per user/lesson/page/attempt.
 - `local_lessontweak_lopt` — per-lesson options (`showconfidence`, `timermode`,
-  `timerminutes`, `timerbar`, `timersize`).
+  `timerminutes`, `timerbar`, `timersize`, `tweak`).
 
 ## Install
 

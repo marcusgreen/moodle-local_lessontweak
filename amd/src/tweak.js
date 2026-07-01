@@ -1,4 +1,3 @@
-<?php
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -15,17 +14,24 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for local_lessontweak.
+ * Apply a per-lesson appearance tweak on lesson view pages.
  *
- * @package    local_lessontweak
+ * The server passes admin-authored CSS chosen for this lesson. The module
+ * injects it into a <style> element in the document head. Appearance only —
+ * nothing is sent back and the lesson grade is untouched.
+ *
+ * @module     local_lessontweak/tweak
  * @copyright  2026 Marcus Green
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->version   = 2026070103;
-$plugin->requires  = 2024100700;        // Moodle 4.5 (Hooks output API).
-$plugin->component = 'local_lessontweak';
-$plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.9.1';
+export const init = (params) => {
+    const css = params && params.css ? String(params.css) : '';
+    if (!css) {
+        return;
+    }
+    const style = document.createElement('style');
+    style.setAttribute('data-local-lessontweak', 'tweak');
+    style.textContent = css;
+    document.head.appendChild(style);
+};

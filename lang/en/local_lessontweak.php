@@ -61,6 +61,16 @@ $string['timersize_large'] = 'Large';
 $string['timersize_xlarge'] = 'Extra large';
 $string['timersizedefault'] = 'Default timer clock size';
 $string['timersizedefault_desc'] = 'The clock size used when a lesson does not set its own. Lessons can override this in their settings.';
+$string['enabletweaks'] = 'Enable appearance tweaks';
+$string['enabletweaks_desc'] = 'Lets teachers pick a site-defined CSS "tweak" per lesson to change how that lesson looks to students. Define the tweaks below.';
+$string['tweaks'] = 'Appearance tweaks (JSON)';
+$string['tweaks_desc'] = 'A JSON array of tweaks, each an object with a "name" and a "css" string, for example:<br><pre>[
+  {"name": "Focus mode", "css": ".path-mod-lesson #region-main { max-width: 50rem; }"}
+]</pre>The name appears in each lesson\'s settings; the CSS is applied on that lesson\'s pages when selected. Scope your selectors (e.g. with <code>.path-mod-lesson</code>) so they only affect lesson pages.';
+$string['tweaksinvalidjson'] = 'Invalid tweaks: expected a JSON array of objects, each with a non-empty "name" and "css".';
+$string['lessontweaktweak'] = 'Appearance tweak';
+$string['lessontweaktweak_help'] = 'Choose a site-defined appearance tweak to change how this lesson looks to students. "None" applies no tweak. Tweaks are defined by an administrator in the plugin settings; requires the site-wide appearance tweaks setting to be enabled.';
+$string['tweaknone'] = 'None';
 $string['confidencereport'] = 'Confidence report';
 $string['confidencestudent'] = 'Student';
 $string['confidencetimespent'] = 'Time spent';

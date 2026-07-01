@@ -156,6 +156,50 @@ function local_lessontweak_timer_size(int $lessonid): string {
 }
 
 /**
+ * The appearance tweaks defined site-wide, keyed by name => CSS.
+ *
+ * Returns an empty array when the feature is off or the JSON is empty/invalid.
+ *
+ * @return array [string name => string css]
+ */
+function local_lessontweak_get_tweaks(): array {
+    if (!get_config('local_lessontweak', 'enabletweaks')) {
+        return [];
+    }
+    $raw = trim((string) get_config('local_lessontweak', 'tweaks'));
+    if ($raw === '') {
+        return [];
+    }
+    $decoded = json_decode($raw);
+    if (!is_array($decoded)) {
+        return [];
+    }
+    $tweaks = [];
+    foreach ($decoded as $item) {
+        if (is_object($item) && !empty($item->name) && isset($item->css) && is_string($item->css)) {
+            $tweaks[(string) $item->name] = (string) $item->css;
+        }
+    }
+    return $tweaks;
+}
+
+/**
+ * The CSS of the tweak chosen for a lesson, or null if none / no longer defined.
+ *
+ * @param int $lessonid
+ * @return string|null
+ */
+function local_lessontweak_lesson_tweak(int $lessonid): ?string {
+    global $DB;
+    $name = $DB->get_field('local_lessontweak_lopt', 'tweak', ['lessonid' => $lessonid]);
+    if ($name === false || $name === null || $name === '') {
+        return null;
+    }
+    $tweaks = local_lessontweak_get_tweaks();
+    return $tweaks[$name] ?? null;
+}
+
+/**
  * Add per-lesson Lesson tweaks checkboxes to the lesson settings form.
  *
  * Uses the core coursemodule form callback, so no lesson core file is modified.
@@ -169,7 +213,8 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
 
     $confidence = get_config('local_lessontweak', 'enableconfidence');
     $elapsed = get_config('local_lessontweak', 'enableelapsedtimer');
-    if (!$confidence && !$elapsed) {
+    $tweaks = get_config('local_lessontweak', 'enabletweaks') ? local_lessontweak_get_tweaks() : [];
+    if (!$confidence && !$elapsed && !$tweaks) {
         return;
     }
     $current = $formwrapper->get_current();
@@ -236,6 +281,20 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
         $mform->setDefault('lessontweaktimerbar', (int) $defbar);
         $mform->setDefault('lessontweaktimersize', $defsize);
     }
+
+    if ($tweaks) {
+        $options = ['' => get_string('tweaknone', 'local_lessontweak')];
+        foreach (array_keys($tweaks) as $name) {
+            $options[$name] = $name;
+        }
+        $mform->addElement('select', 'lessontweaktweak',
+            get_string('lessontweaktweak', 'local_lessontweak'), $options);
+        $mform->addHelpButton('lessontweaktweak', 'lessontweaktweak', 'local_lessontweak');
+        $default = $lessonid
+            ? (string) ($DB->get_field('local_lessontweak_lopt', 'tweak', ['lessonid' => $lessonid]) ?: '')
+            : '';
+        $mform->setDefault('lessontweaktweak', isset($options[$default]) ? $default : '');
+    }
 }
 
 /**
@@ -269,6 +328,12 @@ function local_lessontweak_coursemodule_edit_post_actions($data, $course) {
         $sizes = local_lessontweak_timer_sizes();
         $size = (string) $data->lessontweaktimersize;
         $fields['timersize'] = isset($sizes[$size]) ? $size : null;
+    }
+    if (property_exists($data, 'lessontweaktweak')) {
+        // Store the chosen tweak name only if it is still defined, else clear.
+        $tweaks = local_lessontweak_get_tweaks();
+        $name = (string) $data->lessontweaktweak;
+        $fields['tweak'] = ($name !== '' && isset($tweaks[$name])) ? $name : null;
     }
     if (!$fields) {
         return $data;

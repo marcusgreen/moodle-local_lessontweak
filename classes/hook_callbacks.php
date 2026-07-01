@@ -43,6 +43,48 @@ class hook_callbacks {
         self::maybe_add_confidence_slider($PAGE);
         self::maybe_add_time_tracker($PAGE);
         self::maybe_add_elapsed_timer($PAGE);
+        self::maybe_add_tweak($PAGE);
+    }
+
+    /**
+     * Apply the lesson's chosen appearance tweak on view pages (view.php).
+     *
+     * Injects admin-authored CSS (chosen per lesson) via an AMD module. Only
+     * site admins can author tweaks; appearance only, the grade is untouched.
+     *
+     * @param \moodle_page $PAGE
+     */
+    protected static function maybe_add_tweak(\moodle_page $PAGE): void {
+        global $CFG;
+
+        if (!get_config('local_lessontweak', 'enabletweaks')) {
+            return;
+        }
+        if ($PAGE->pagetype !== 'mod-lesson-view') {
+            return;
+        }
+        $context = $PAGE->context;
+        if (empty($context) || $context->contextlevel !== CONTEXT_MODULE) {
+            return;
+        }
+        if (!has_capability('mod/lesson:view', $context)) {
+            return;
+        }
+
+        $cm = get_coursemodule_from_id('lesson', $context->instanceid);
+        if (!$cm) {
+            return;
+        }
+
+        require_once($CFG->dirroot . '/local/lessontweak/lib.php');
+        $css = local_lessontweak_lesson_tweak((int) $cm->instance);
+        if ($css === null || $css === '') {
+            return;
+        }
+
+        $PAGE->requires->js_call_amd('local_lessontweak/tweak', 'init', [[
+            'css' => $css,
+        ]]);
     }
 
     /**
