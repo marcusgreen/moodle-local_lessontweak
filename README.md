@@ -135,3 +135,7 @@ plugin web services, form and navigation callbacks driving lesson's existing
 data and endpoints. See `mod/lesson/poc/no_core_improvements.md` for the wider
 catalogue, and `mod/lesson/poc/options.md` for changes that *do* need core (new
 scored question types, question-bank sharing).
+
+## Credits
+
+Created as part of the **MoodleMoot DACH 26 Lesson improvement team** work.
