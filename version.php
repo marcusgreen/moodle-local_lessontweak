@@ -24,8 +24,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026070103;
+$plugin->version   = 2026070104;
 $plugin->requires  = 2024100700;        // Moodle 4.5 (Hooks output API).
 $plugin->component = 'local_lessontweak';
 $plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.9.1';
+$plugin->release   = '0.9.2';
