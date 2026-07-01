@@ -178,5 +178,18 @@ function xmldb_local_lessontweak_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026063007, 'local', 'lessontweak');
     }
 
+    if ($oldversion < 2026063008) {
+
+        // Add the depleting-bar option for countdown mode.
+        $table = new xmldb_table('local_lessontweak_lopt');
+        $field = new xmldb_field('timerbar', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'timersize');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Lessontweak savepoint reached.
+        upgrade_plugin_savepoint(true, 2026063008, 'local', 'lessontweak');
+    }
+
     return true;
 }

@@ -64,6 +64,9 @@ const place = (badge) => {
  * @param {string} params.mode 'elapsed' or 'countdown'
  * @param {number} params.seconds elapsed seconds, or remaining seconds for countdown
  * @param {string} [params.size] clock font size in rem
+ * @param {number} [params.bar] 1 to show a depleting bar (countdown only)
+ * @param {number} [params.total] full countdown duration in seconds (for the bar)
+ * @param {number} [params.frozen] 1 to show a static value and not tick (end of lesson)
  */
 export const init = (params) => {
     const countdown = params.mode === 'countdown';
@@ -71,6 +74,9 @@ export const init = (params) => {
     const loadedAt = Date.now();
     const labelKey = countdown ? 'countdownlabel' : 'elapsedlabel';
     const size = parseFloat(params.size);
+    const total = Math.max(0, parseInt(params.total, 10) || 0);
+    const showBar = countdown && Number(params.bar) === 1 && total > 0;
+    const frozen = Number(params.frozen) === 1;
 
     getString(labelKey, 'local_lessontweak').then((label) => {
         const badge = document.createElement('div');
@@ -89,16 +95,40 @@ export const init = (params) => {
 
         badge.appendChild(text);
         badge.appendChild(clock);
+
+        let fill = null;
+        if (showBar) {
+            badge.classList.add('lessontweak-elapsed-hasbar');
+            const track = document.createElement('div');
+            track.className = 'lessontweak-elapsed-bar';
+            track.setAttribute('role', 'progressbar');
+            track.setAttribute('aria-valuemin', '0');
+            track.setAttribute('aria-valuemax', String(total));
+            fill = document.createElement('div');
+            fill.className = 'lessontweak-elapsed-bar-fill';
+            track.appendChild(fill);
+            badge.appendChild(track);
+        }
+
         place(badge);
 
         let timer = null;
         const tick = () => {
-            const delta = (Date.now() - loadedAt) / 1000;
+            // Frozen (end of lesson): hold the value passed by the server.
+            const delta = frozen ? 0 : (Date.now() - loadedAt) / 1000;
             const seconds = countdown ? (base - delta) : (base + delta);
-            clock.textContent = formatHms(seconds);
+            const clamped = Math.max(0, seconds);
+            clock.textContent = formatHms(clamped);
+
+            if (fill) {
+                fill.style.width = Math.min(100, (clamped / total) * 100) + '%';
+            }
+
             if (countdown && seconds <= 0) {
-                clock.textContent = formatHms(0);
                 badge.classList.add('lessontweak-elapsed-expired');
+                if (fill) {
+                    fill.style.width = '0%';
+                }
                 if (timer) {
                     window.clearInterval(timer);
                 }
@@ -107,7 +137,9 @@ export const init = (params) => {
             }
         };
         tick();
-        timer = window.setInterval(tick, 1000);
+        if (!frozen) {
+            timer = window.setInterval(tick, 1000);
+        }
         return label;
     }).catch(Log.error);
 };

@@ -12,12 +12,14 @@ Everything rides core extension points — output hooks, plugin web services, th
 | **Drag-to-reorder pages** | lesson editor (`edit.php`) | yes — drives lesson's own move action |
 | **Confidence slider** | question pages (`view.php`) | yes — own web service + own table |
 | **Page time tracking** | every lesson page (`view.php`) | yes — heartbeat web service + own table |
-| **Timer badge** (elapsed or countdown) | every lesson page (`view.php`) | display only |
-| **Confidence/time report** | activity menu → *Confidence report* | reads the two tables above |
+| **Timer badge** (elapsed or countdown, optional depleting bar, sized) | every lesson page (`view.php`) | display only |
+| **Confidence report** | activity menu → *Confidence report* | reads `_conf` (+ `_ptime`) |
+| **Time report** | activity menu → *Time report* | reads `_ptime` |
 
 Each feature has a site-wide on/off in *Site administration → Plugins → Local
 plugins → Lesson tweaks*. The confidence slider and the timer also have
-per-lesson controls in the lesson's own settings form.
+per-lesson controls in the lesson's own settings form; the timer additionally
+has a site-wide default clock size that a lesson can override.
 
 ## How it works (no core changes)
 
@@ -49,24 +51,33 @@ Per lesson, the teacher chooses **No timer**, **Elapsed (count up)** or
 own `{lesson_timer}.starttime` (written for every attempt), computes elapsed or
 remaining seconds, and passes them to `amd/src/elapsedtimer.js`, which ticks on
 the browser clock (no server/client skew). Countdown turns amber in the last
-minute and red at zero. Display only — the lesson grade and time limit are
-untouched.
+minute and red at zero, and can optionally show a **depleting progress bar**
+alongside the clock. The **clock size** (Small → Extra large) comes from the
+lesson's own override, else the site-wide default. Display only — the lesson
+grade and time limit are untouched.
 
-### 5. Teacher report
-`local_lessontweak_extend_settings_navigation()` adds a **Confidence report** link
-to the lesson's settings menu (capability `mod/lesson:viewreports`). `report.php`
-merges the confidence and time tables into one table: student, page, attempt,
-confidence %, time spent.
+### 5. Teacher reports
+`local_lessontweak_extend_settings_navigation()` adds up to two links to the
+lesson's settings menu (both gated on `mod/lesson:viewreports`), each appearing
+only when its site-wide feature is enabled:
+
+- **Confidence report** (`report.php`, shown when the confidence slider is on) —
+  merges the confidence and time tables: student, page, attempt, confidence %,
+  time spent.
+- **Time report** (`timereport.php`, shown when page time tracking is on) —
+  per-page active time plus attempt duration and a per-attempt total.
 
 ## Files
 
 ```
 local/lessontweak/
 ├── version.php
-├── settings.php                      # site-wide toggles for each feature
+├── settings.php                      # site-wide toggles + default timer size
 ├── styles.css
 ├── lib.php                           # nav + coursemodule_* form callbacks, timer helpers
-├── report.php                        # teacher confidence/time report
+├── report.php                        # teacher confidence report (+ time column)
+├── timereport.php                    # teacher time report (per page + attempt total)
+├── docs/                             # drag-drop demo (gif + mp4)
 ├── lang/en/local_lessontweak.php
 ├── db/
 │   ├── hooks.php                     # before_footer listener
@@ -89,7 +100,7 @@ local/lessontweak/
 - `local_lessontweak_conf` — confidence per user/lesson/page/attempt.
 - `local_lessontweak_ptime` — active seconds per user/lesson/page/attempt.
 - `local_lessontweak_lopt` — per-lesson options (`showconfidence`, `timermode`,
-  `timerminutes`).
+  `timerminutes`, `timerbar`, `timersize`).
 
 ## Install
 
@@ -101,8 +112,10 @@ local/lessontweak/
 ## Usage
 
 - **Reorder:** lesson → *Edit → Collapsed*, drag a page row, release.
-- **Confidence / timer per lesson:** lesson → *Edit settings → Lesson tweaks*.
-- **Report:** lesson → activity menu (*More*) → *Confidence report*.
+- **Confidence / timer (mode, countdown minutes, depleting bar, clock size) per
+  lesson:** lesson → *Edit settings → Lesson tweaks*.
+- **Reports:** lesson → activity menu (*More*) → *Confidence report* and/or
+  *Time report* (each shown when its feature is enabled).
 
 ## Notes / limits
 

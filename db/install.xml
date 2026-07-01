@@ -33,6 +33,7 @@
         <FIELD NAME="timermode" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Timer shown to students: 0 none, 1 elapsed count-up, 2 countdown."/>
         <FIELD NAME="timerminutes" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Countdown duration in minutes (timermode = 2)."/>
         <FIELD NAME="timersize" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Clock font size in rem; null/empty uses the site default."/>
+        <FIELD NAME="timerbar" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Show a depleting progress bar for countdown mode."/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>

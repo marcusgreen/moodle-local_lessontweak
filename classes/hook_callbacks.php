@@ -76,28 +76,49 @@ class hook_callbacks {
         }
 
         require_once($CFG->dirroot . '/local/lessontweak/lib.php');
-        [$mode, $minutes] = local_lessontweak_timer_config((int) $cm->instance);
+        [$mode, $minutes, $bar] = local_lessontweak_timer_config((int) $cm->instance);
         if ($mode === LOCAL_LESSONTWEAK_TIMER_NONE) {
             return;
         }
 
-        // Latest attempt start for this user (lesson records it for every attempt).
-        $starttime = $DB->get_field_sql(
-            "SELECT MAX(starttime) FROM {lesson_timer} WHERE lessonid = :lessonid AND userid = :userid",
-            ['lessonid' => $cm->instance, 'userid' => $USER->id]
-        );
-        if (empty($starttime)) {
-            // No timer row (e.g. a teacher previewing): nothing to count from.
-            return;
+        // Latest attempt timer for this user (lesson records one per attempt).
+        $timer = $DB->get_records('lesson_timer',
+            ['lessonid' => $cm->instance, 'userid' => $USER->id],
+            'starttime DESC', 'id, starttime, lessontime, completed', 0, 1);
+        $timer = $timer ? reset($timer) : null;
+
+        // The end-of-lesson page uses pageid = LESSON_EOL (-9); the attempt's
+        // timer is also marked completed there. In both cases freeze the badge.
+        $frozen = false;
+        if (!$timer) {
+            // Teachers preview lessons without starting an attempt, so there is no
+            // {lesson_timer} row. Show a live demo timer counting from now so they
+            // can see the badge; students always have a real attempt start.
+            if (!has_capability('mod/lesson:manage', $context)) {
+                return;
+            }
+            $starttime = time();
+        } else {
+            $starttime = (int) $timer->starttime;
+            if (optional_param('pageid', 0, PARAM_INT) === -9 || !empty($timer->completed)) {
+                $frozen = true;
+            }
         }
 
-        $elapsed = max(0, time() - (int) $starttime);
+        if ($frozen && !empty($timer->lessontime)) {
+            // Stop at the recorded end time of the attempt.
+            $elapsed = max(0, (int) $timer->lessontime - $starttime);
+        } else {
+            $elapsed = max(0, time() - $starttime);
+        }
 
+        $total = 0;
         if ($mode === LOCAL_LESSONTWEAK_TIMER_COUNTDOWN) {
             if ($minutes <= 0) {
                 return;
             }
-            $seconds = max(0, ($minutes * 60) - $elapsed);
+            $total = $minutes * 60;
+            $seconds = max(0, $total - $elapsed);
             $jsmode = 'countdown';
         } else {
             $seconds = $elapsed;
@@ -108,6 +129,9 @@ class hook_callbacks {
             'mode'    => $jsmode,
             'seconds' => $seconds,
             'size'    => local_lessontweak_timer_size((int) $cm->instance),
+            'bar'     => ($jsmode === 'countdown' && $bar) ? 1 : 0,
+            'total'   => $total,
+            'frozen'  => $frozen ? 1 : 0,
         ]]);
     }
 

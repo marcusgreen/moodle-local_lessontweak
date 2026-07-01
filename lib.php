@@ -23,13 +23,18 @@
  */
 
 /**
- * Add a "Confidence report" link to a lesson's settings navigation.
+ * Add the Lesson tweaks report links to a lesson's settings navigation.
+ *
+ * The confidence report appears when the confidence slider is enabled; the time
+ * report appears when page time tracking is enabled. Each is independent.
  *
  * @param settings_navigation $settingsnav
  * @param context $context
  */
 function local_lessontweak_extend_settings_navigation(settings_navigation $settingsnav, context $context): void {
-    if (!get_config('local_lessontweak', 'enableconfidence')) {
+    $confidence = get_config('local_lessontweak', 'enableconfidence');
+    $timetracking = get_config('local_lessontweak', 'enabletimetracking');
+    if (!$confidence && !$timetracking) {
         return;
     }
     if (!$context instanceof context_module) {
@@ -48,15 +53,27 @@ function local_lessontweak_extend_settings_navigation(settings_navigation $setti
     $node = $settingsnav->find('modulesettings', navigation_node::TYPE_SETTING)
         ?: $settingsnav;
 
-    $url = new moodle_url('/local/lessontweak/report.php', ['id' => $cm->id]);
-    $node->add(
-        get_string('confidencereport', 'local_lessontweak'),
-        $url,
-        navigation_node::TYPE_SETTING,
-        null,
-        'lessontweakconfidence',
-        new pix_icon('i/report', '')
-    );
+    if ($confidence) {
+        $node->add(
+            get_string('confidencereport', 'local_lessontweak'),
+            new moodle_url('/local/lessontweak/report.php', ['id' => $cm->id]),
+            navigation_node::TYPE_SETTING,
+            null,
+            'lessontweakconfidence',
+            new pix_icon('i/report', '')
+        );
+    }
+
+    if ($timetracking) {
+        $node->add(
+            get_string('timereport', 'local_lessontweak'),
+            new moodle_url('/local/lessontweak/timereport.php', ['id' => $cm->id]),
+            navigation_node::TYPE_SETTING,
+            null,
+            'lessontweaktime',
+            new pix_icon('i/report', '')
+        );
+    }
 }
 
 /**
@@ -87,15 +104,16 @@ define('LOCAL_LESSONTWEAK_TIMER_COUNTDOWN', 2);
  * Defaults to elapsed mode when no per-lesson row exists yet.
  *
  * @param int $lessonid
- * @return array [int mode, int minutes]
+ * @return array [int mode, int minutes, bool bar]
  */
 function local_lessontweak_timer_config(int $lessonid): array {
     global $DB;
-    $row = $DB->get_record('local_lessontweak_lopt', ['lessonid' => $lessonid], 'timermode, timerminutes');
+    $row = $DB->get_record('local_lessontweak_lopt', ['lessonid' => $lessonid],
+        'timermode, timerminutes, timerbar');
     if (!$row) {
-        return [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0];
+        return [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0, false];
     }
-    return [(int) $row->timermode, (int) $row->timerminutes];
+    return [(int) $row->timermode, (int) $row->timerminutes, (bool) $row->timerbar];
 }
 
 /**
@@ -190,6 +208,14 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
         $mform->hideIf('lessontweaktimerminutes', 'lessontweaktimermode', 'neq',
             LOCAL_LESSONTWEAK_TIMER_COUNTDOWN);
 
+        // Depleting progress bar, countdown only.
+        $mform->addElement('advcheckbox', 'lessontweaktimerbar',
+            get_string('timerbar', 'local_lessontweak'));
+        $mform->addHelpButton('lessontweaktimerbar', 'timerbar', 'local_lessontweak');
+        $mform->setType('lessontweaktimerbar', PARAM_BOOL);
+        $mform->hideIf('lessontweaktimerbar', 'lessontweaktimermode', 'neq',
+            LOCAL_LESSONTWEAK_TIMER_COUNTDOWN);
+
         // Clock size: an empty first option falls back to the site default.
         $sizeoptions = ['' => get_string('timersize_default', 'local_lessontweak')]
             + local_lessontweak_timer_sizes();
@@ -199,14 +225,15 @@ function local_lessontweak_coursemodule_standard_elements($formwrapper, $mform):
         $mform->hideIf('lessontweaktimersize', 'lessontweaktimermode', 'eq',
             LOCAL_LESSONTWEAK_TIMER_NONE);
 
-        [$defmode, $defmin] = $lessonid
+        [$defmode, $defmin, $defbar] = $lessonid
             ? local_lessontweak_timer_config($lessonid)
-            : [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0];
+            : [LOCAL_LESSONTWEAK_TIMER_ELAPSED, 0, false];
         $defsize = $lessonid
             ? (string) ($DB->get_field('local_lessontweak_lopt', 'timersize', ['lessonid' => $lessonid]) ?: '')
             : '';
         $mform->setDefault('lessontweaktimermode', $defmode);
         $mform->setDefault('lessontweaktimerminutes', $defmin);
+        $mform->setDefault('lessontweaktimerbar', (int) $defbar);
         $mform->setDefault('lessontweaktimersize', $defsize);
     }
 }
@@ -235,6 +262,7 @@ function local_lessontweak_coursemodule_edit_post_actions($data, $course) {
     if (property_exists($data, 'lessontweaktimermode')) {
         $fields['timermode'] = (int) $data->lessontweaktimermode;
         $fields['timerminutes'] = max(0, (int) ($data->lessontweaktimerminutes ?? 0));
+        $fields['timerbar'] = !empty($data->lessontweaktimerbar) ? 1 : 0;
     }
     if (property_exists($data, 'lessontweaktimersize')) {
         // Empty means "use the site default".
